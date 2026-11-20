@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Swing Tracer</title>
+<style>
+:root{--bg:#fff;--fg:#111;--card:#f1f1f1;--mut:#666;--bd:#d6d6d6;--ac:#c9e000;--acfg:#111;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f0f10;--fg:#f2f2f2;--card:#1c1c1e;--mut:#999;--bd:#333}}
+:root[data-theme="dark"]{--bg:#0f0f10;--fg:#f2f2f2;--card:#1c1c1e;--mut:#999;--bd:#333}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;padding:12px;max-width:760px;margin-inline:auto}
+h1{font-size:20px;margin:4px 0 10px}
+.wrap{position:relative;background:#000;border-radius:10px;overflow:hidden}
+video{display:block;width:100%;height:auto;max-height:60vh;margin:auto;object-fit:contain}
+canvas{position:absolute;left:0;top:0;touch-action:manipulation}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;align-items:center}
+button,select,input{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:7px 10px}
+button.on{background:var(--ac);color:var(--acfg);border-color:var(--ac);font-weight:600}
+input[type=range]{flex:1;padding:0}input[type=number]{width:70px}
+.card{background:var(--card);border-radius:10px;padding:10px;margin-top:10px}
+table{width:100%;border-collapse:collapse;text-align:right}th{color:var(--mut);font-size:12px;font-weight:500}
+td:first-child,th:first-child{text-align:left;font-weight:700}td,th{padding:5px 4px}
+.hint{color:var(--mut);font-size:13px}
+</style></head><body>
+<h1>Swing Tracer</h1>
+<input type="file" id="file" accept="video/*">
+<div class="wrap"><video id="v" playsinline muted></video><canvas id="c" width="640" height="360"></canvas></div>
+<div class="row"><input type="range" id="seek" min="0" max="1" step="0.001" value="0">
+<button id="back">◀</button><button id="fwd">▶</button><button id="play">Play</button></div>
+<div class="row"><span class="hint">Tag:</span>
+<button data-m="head" class="on">Head</button><button data-m="belt">Belt buckle</button><button data-m="foot">Front foot</button><button data-m="cal">Calibrate</button></div>
+<div class="row"><button id="pose" class="on">Auto-track (AI)</button><button id="trk">Track from clicks</button><select id="pq"><option value="lite">Fast</option><option value="full" selected>Balanced</option><option value="heavy">Best</option></select><select id="ff"><option value="auto">Front foot: auto</option><option value="left">Front foot: screen left</option><option value="right">Front foot: screen right</option></select><button id="stp">Stop</button><label class="hint">Search <input type="number" id="rad" value="24" min="6" max="60"></label></div>
+<div class="row"><span class="hint">Phase here:</span>
+<button data-p="start">Start</button><button data-p="load">Load</button><button data-p="plant">Foot plant</button></div>
+<div class="row">
+<label class="hint">View <select id="view"><option value="side">Side</option><option value="catcher">Catcher</option></select></label>
+<label class="hint"><span id="dl">Pitcher is</span> <select id="dir"><option value="1">to the right</option><option value="-1">to the left</option></select></label>
+<label class="hint">FPS <input type="number" id="fps" value="30" min="1"></label>
+<label class="hint">Step <select id="step"><option>1</option><option>2</option><option>3</option><option>5</option></select> fr</label>
+<label class="hint">Ref in <input type="number" id="ref" value="17" step="0.5"></label>
+<button id="clr">Clear</button><button id="clrall">Clear all</button></div>
+<p class="hint" id="msg">Fastest: scrub to the first frame of the swing and tap Auto-track (AI). It finds the head, hips, shoulders and feet on its own, so there are no clicks to line up. It needs this page hosted on your own site (GitHub Pages is fine) and internet the first time. In catcher view, say which foot is the front foot. The click method below is the backup. 1) Load a side-on video and calibrate: click two ends of something with a known width (home plate is 17 in). 2) Scrub to the first frame of the swing and click Head, Belt buckle and Front foot once each. For a tough foot, also scrub to where it lands and click it there – the tracer follows the path in between. 3) Hit Track swing. Load and Foot plant fill in automatically (marked ~); scrub to the true frame and tap a phase button to correct. To fix drift, click the right spot on a bad frame and Track swing again. Catcher view: if the camera is behind the catcher, switch View to Catcher and calibrate across the width of the plate. The table then shows side-to-side (↔) and up/down (↕) movement instead of movement toward the pitcher, since depth can’t be measured from behind.</p>
+<div class="card"><table><thead><tr><th id="unit">Inches</th><th>Load</th><th id="h2">Stride</th><th>Net</th></tr></thead><tbody id="tb"></tbody></table><p class="hint" id="phs" style="margin:6px 0 0"></p>
+<p class="hint" style="margin:6px 0 0">Positive = toward the pitcher. Load = Start→Load, Stride = Load→Foot plant, Net = both.</p></div>
+<script>
+const $=id=>document.getElementById(id),v=$('v'),c=$('c'),x=c.getContext('2d');
+const J={head:'Head',belt:'Belt buckle',foot:'Front foot'};
+let mode='head',pts={head:[],belt:[],foot:[]},ph={},cal=[],scale=null,dir=1,raf;
+const fps=()=>+$('fps').value||30;
+function val(j,t){const a=pts[j];if(!a.length)return null;if(t<=a[0].t)return a[0];
+ for(let i=1;i<a.length;i++)if(t<=a[i].t){const p=a[i-1],q=a[i],k=(t-p.t)/(q.t-p.t||1);return{x:p.x+(q.x-p.x)*k,y:p.y+(q.y-p.y)*k}}
+ return a[a.length-1]}
+function trace(j,t){const a=pts[j].filter(p=>p.t<=t+1e-4);if(!a.length)return;
+ x.beginPath();x.moveTo(a[0].x,a[0].y);
+ for(let i=1;i<a.length-1;i++){const mx=(a[i].x+a[i+1].x)/2,my=(a[i].y+a[i+1].y)/2;x.quadraticCurveTo(a[i].x,a[i].y,mx,my)}
+ if(a.length>1)x.lineTo(a[a.length-1].x,a[a.length-1].y);x.stroke();
+ const l=a[a.length-1];x.beginPath();x.arc(l.x,l.y,c.width/110,0,7);x.fill();}
+function draw(){const t=v.currentTime,u=c.width/640;x.clearRect(0,0,c.width,c.height);
+ x.strokeStyle=x.fillStyle='#e6ff00';x.lineWidth=4*u;x.lineCap=x.lineJoin='round';
+ for(const j in J)trace(j,t);
+ for(const j in J)pts[j].forEach(p=>{if(p.u&&Math.abs(p.t-t)<.6/fps()){x.save();x.strokeStyle='#fff';x.lineWidth=2*u;x.beginPath();x.arc(p.x,p.y,10*u,0,7);x.stroke();x.restore()}});
+ if(cal.length){x.fillStyle='#ff4d4d';cal.forEach(p=>{x.beginPath();x.arc(p.x,p.y,6*u,0,7);x.fill()})}
+ $('seek').value=t/(v.duration||1);raf=requestAnimationFrame(draw)}
+function fmt(n){return(n>0?'+':'')+n.toFixed(1)}
+function calc(){const tb=$('tb');tb.innerHTML='';const sc=scale||1;
+ for(const j of ['head','belt','foot']){const g=k=>ph[k]!=null&&val(j,ph[k]),p0=g('start'),p1=g('load'),p2=g('plant');
+  const add=(lab,d)=>{const e=(p,q)=>p&&q?d(p,q):null,L=e(p0,p1),S=e(p1,p2),N=L!=null&&S!=null?L+S:null;
+   tb.insertAdjacentHTML('beforeend',`<tr><td>${lab}</td>${[L,S,N].map(n=>`<td>${n==null?'–':fmt(n)}</td>`).join('')}</tr>`)};
+  if(view==='side')add(J[j],(p,q)=>(q.x-p.x)*dir*sc);
+  else{add(J[j]+' ↔',(p,q)=>(q.x-p.x)*dir*sc);add(J[j]+' ↕',(p,q)=>(p.y-q.y)*sc)}}
+ $('unit').textContent=scale?'Inches':'Pixels';$('h2').textContent=view==='side'?'Stride':'To plant';
+ const f=k=>ph[k]==null?'–':(man[k]||k==='start'?'':'~')+ph[k].toFixed(2)+'s';
+ $('phs').textContent='Start '+f('start')+' · Load '+f('load')+' · Foot plant '+f('plant')+(view==='side'?'':' · ↔ + = screen '+(dir>0?'right':'left')+', ↕ + = up · Load = top of leg lift')+(scale?'':' · Calibrate to convert pixels to inches')+'  (~ = auto estimate)';
+ document.querySelectorAll('[data-p]').forEach(e=>e.title=ph[e.dataset.p]!=null?ph[e.dataset.p].toFixed(2)+'s':'')}
+function say(m){$('msg').textContent=m}
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;v.src=URL.createObjectURL(f);pts={head:[],belt:[],foot:[]};ph={};man={};cal=[];scale=null;calc()};
+function fit(){const W=v.clientWidth,H=v.clientHeight,vw=v.videoWidth,vh=v.videoHeight;if(!vw)return;const s=Math.min(W/vw,H/vh),w=vw*s,h=vh*s;c.style.width=w+'px';c.style.height=h+'px';c.style.left=(W-w)/2+'px';c.style.top=(H-h)/2+'px'}
+addEventListener('resize',fit);if(window.ResizeObserver)new ResizeObserver(fit).observe(v);
+v.onloadedmetadata=()=>{c.width=v.videoWidth;c.height=v.videoHeight;fit();cancelAnimationFrame(raf);draw()};
+$('seek').oninput=e=>{v.pause();v.currentTime=e.target.value*v.duration};
+const stepBy=n=>{v.pause();v.currentTime=Math.max(0,Math.min(v.duration,v.currentTime+n*(+$('step').value)/fps()))};
+$('back').onclick=()=>stepBy(-1);$('fwd').onclick=()=>stepBy(1);
+$('play').onclick=()=>{if(v.paused){v.play();$('play').textContent='Pause'}else{v.pause();$('play').textContent='Play'}};
+v.onended=()=>$('play').textContent='Play';
+$('dir').onchange=e=>{dir=+e.target.value;autoPh();calc()};
+$('view').onchange=e=>{view=e.target.value;$('dl').textContent=view==='side'?'Pitcher is':'Positive side is';Object.keys(ph).forEach(k=>{if(!man[k]&&k!=='start')delete ph[k]});autoPh();calc()};
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(o=>o.classList.toggle('on',o===b));
+ if(mode==='cal'){cal=[];say('Click the two ends of your reference (e.g. both edges of home plate).')}});
+document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{ph[b.dataset.p]=v.currentTime;man[b.dataset.p]=1;say(b.textContent+' set at '+v.currentTime.toFixed(2)+'s');calc()});
+c.onclick=e=>{if(!v.videoWidth)return;const r=c.getBoundingClientRect(),k=c.width/r.width,p={x:(e.clientX-r.left)*k,y:(e.clientY-r.top)*k};
+ if(mode==='cal'){cal.push(p);if(cal.length===2){const px=Math.hypot(cal[1].x-cal[0].x,cal[1].y-cal[0].y);scale=(+$('ref').value)/px;say('Calibrated: '+(1/scale).toFixed(1)+' px per inch.');mode='head';document.querySelectorAll('[data-m]').forEach(o=>o.classList.toggle('on',o.dataset.m==='head'));calc()}return}
+ const t=v.currentTime,a=pts[mode],e1=0.4/fps(),i=a.findIndex(q=>Math.abs(q.t-t)<e1);
+ if(i>=0)a[i]={t:a[i].t,x:p.x,y:p.y,u:1};else{a.push({t,x:p.x,y:p.y,u:1});a.sort((m,n)=>m.t-n.t)}
+ calc()};
+let stop=false;
+let man={},view='side';
+const seekTo=t=>new Promise(r=>{if(Math.abs(v.currentTime-t)<1e-3)return r();
+ let d=0;const fin=()=>{if(!d){d=1;v.onseeked=null;r()}},rv=!!v.requestVideoFrameCallback;
+ if(rv)v.requestVideoFrameCallback(()=>setTimeout(fin,0));
+ v.onseeked=()=>setTimeout(fin,rv?250:60);setTimeout(fin,2500);v.currentTime=t});
+function autoPh(){if(view==='side')return autoPhSide();
+ const F=pts.foot,set=(k,t)=>{if(!man[k])ph[k]=t};if(F.length<3)return;
+ const y0=F[0].y;let mn=y0,tp=null;F.forEach(p=>{if(p.y<mn){mn=p.y;tp=p.t}});const lift=y0-mn;
+ if(tp==null||lift<.015*c.height)return;
+ set('load',tp);const q=F.find(p=>p.t>tp&&p.y>=y0-.15*lift);if(q)set('plant',q.t)}
+function autoPhSide(){const B=pts.belt,F=pts.foot;if(B.length<3)return;const set=(k,t)=>{if(!man[k])ph[k]=t};let tp=null;
+ if(F.length>=3){const f0=F[0];let mx=0;F.forEach(p=>mx=Math.max(mx,(p.x-f0.x)*dir));
+  if(mx>.012*c.width){const q=F.find(p=>(p.x-f0.x)*dir>=.9*mx);if(q){tp=q.t;set('plant',tp)}}}
+ const b0=B[0];let lo=1e9,tl=null,hi=-1e9,tc=null;
+ B.forEach(p=>{const d=(p.x-b0.x)*dir;if((tp==null||p.t<=tp)&&d<lo){lo=d;tl=p.t}if((tp==null||p.t>=tp)&&d>hi){hi=d;tc=p.t}});
+ if(tl!=null)set('load',tl);if(tc!=null)set('contact',tc)}
+async function track(){
+ if(!v.videoWidth)return;v.pause();stop=false;
+ const js=Object.keys(J).filter(j=>pts[j].some(p=>p.u));
+ if(!js.length){say('Click '+Object.values(J).join(', ')+' on the first frame of the swing first.');return}
+ const A={},newp={};js.forEach(j=>{A[j]=pts[j].filter(p=>p.u);newp[j]=[]});
+ const t0=Math.min(...js.map(j=>A[j][0].t)),W=640,s=W/v.videoWidth,H=Math.round(v.videoHeight*s),dt=+$('step').value/fps();
+ const o=document.createElement('canvas');o.width=W;o.height=H;
+ const ox=o.getContext('2d',{willReadFrequently:true}),cl=(a,l,h)=>Math.min(h,Math.max(l,a));
+ const gray=()=>{ox.drawImage(v,0,0,W,H);const d=ox.getImageData(0,0,W,H).data,g=new Float32Array(W*H);for(let i=0;i<g.length;i++)g[i]=d[i*4]*.3+d[i*4+1]*.59+d[i*4+2]*.11;return g};
+ const blur=g=>{const r=3,k=2*r+1,a=new Float32Array(W*H),b=new Float32Array(W*H);
+  for(let y=0;y<H;y++){let sm=0;for(let xx=-r;xx<=r;xx++)sm+=g[y*W+cl(xx,0,W-1)];for(let xx=0;xx<W;xx++){a[y*W+xx]=sm/k;sm+=g[y*W+cl(xx+r+1,0,W-1)]-g[y*W+cl(xx-r,0,W-1)]}}
+  for(let xx=0;xx<W;xx++){let sm=0;for(let y=-r;y<=r;y++)sm+=a[cl(y,0,H-1)*W+xx];for(let y=0;y<H;y++){b[y*W+xx]=sm/k;sm+=a[cl(y+r+1,0,H-1)*W+xx]-a[cl(y-r,0,H-1)*W+xx]}}
+  return b};
+ const R=+$('rad').value||24,CF={foot:{P:16,rx:R*1.6,ry:R*.8,a:.05,bl:1},head:{P:10,rx:R,ry:R,a:.15},belt:{P:12,rx:R,ry:R,a:.12}};
+ const getP=(g,cx,cy,P)=>{const N=2*P+1,a=new Float32Array(N*N);let k=0;for(let y=-P;y<=P;y++)for(let xx=-P;xx<=P;xx++)a[k++]=g[(cy+y)*W+cx+xx];return a};
+ const st={},sync=()=>js.forEach(j=>pts[j]=newp[j].concat(A[j].filter(z=>!z.done)));
+ const med=r=>r.sort((p,q)=>p-q)[r.length>>1],smooth=()=>js.forEach(j=>{const a=pts[j];pts[j]=a.map((p,i)=>{if(p.u)return p;const w=a.slice(Math.max(0,i-2),i+3);return{t:p.t,x:med(w.map(z=>z.x)),y:med(w.map(z=>z.y))}})});
+ ph.start=t0;await seekTo(t0);
+ for(let t=t0;t<=v.duration&&!stop;t+=dt){
+  if(t>t0)await seekTo(t);
+  const g=gray(),gb=js.includes('foot')?blur(g):null;
+  for(const j of js){
+   const cf=CF[j],img=cf.bl?gb:g,P=cf.P,N=2*P+1,AA=A[j],q=st[j];
+   const a=AA.find(z=>!z.done&&z.t<=t+dt*.5);
+   if(a){a.done=1;const cx=cl(Math.round(a.x*s),P,W-P-1),cy=cl(Math.round(a.y*s),P,H-P-1);
+    st[j]={x:cx,y:cy,vx:0,vy:0,tp:getP(img,cx,cy,P)};newp[j].push({t:a.t,x:a.x,y:a.y,u:1});continue}
+   if(!q)continue;
+   const nx=AA.find(z=>!z.done),k=nx?.6:1,RX=Math.max(1,Math.round(cf.rx*k)),RY=Math.max(1,Math.round(cf.ry*k)),tp=q.tp;
+   let px,py,pw;
+   if(nx){const fr=Math.min(1,dt/Math.max(dt,nx.t-(t-dt)));px=q.x+Math.round((nx.x*s-q.x)*fr);py=q.y+Math.round((nx.y*s-q.y)*fr);pw=.6}
+   else{px=q.x+Math.round(q.vx);py=q.y+Math.round(q.vy);pw=.25}
+   px=cl(px,P,W-P-1);py=cl(py,P,H-P-1);
+   let tm=0,n=0,tt=0;
+   for(let y=-P;y<=P;y+=2)for(let xx=-P;xx<=P;xx+=2){tm+=tp[(y+P)*N+xx+P];n++}tm/=n;
+   for(let y=-P;y<=P;y+=2)for(let xx=-P;xx<=P;xx+=2){const d=tp[(y+P)*N+xx+P]-tm;tt+=d*d}
+   const tte=Math.max(tt,n*100);let best=1e30,bx=px,by=py,br=0;
+   for(let dy=-RY;dy<=RY;dy++){const cy=py+dy;if(cy<P||cy>=H-P)continue;
+    for(let dx=-RX;dx<=RX;dx++){const cx=px+dx;if(cx<P||cx>=W-P)continue;
+     let sg=0,sgg=0,sgt=0;
+     for(let y=-P;y<=P;y+=2){const gi=(cy+y)*W+cx,ti=(y+P)*N+P;
+      for(let xx=-P;xx<=P;xx+=2){const gv=img[gi+xx],tv=tp[ti+xx]-tm;sg+=gv;sgg+=gv*gv;sgt+=gv*tv}}
+     const e=sgg-sg*sg/n-2*sgt+tt+tte*pw*((dx/RX)**2+(dy/RY)**2);
+     if(e<best){best=e;bx=cx;by=cy;br=e-tte*pw*((dx/RX)**2+(dy/RY)**2)}}}
+   const poor=br>tte*.9;if(poor){bx=px;by=py}
+   q.vx=(bx-q.x)*.7;q.vy=(by-q.y)*.7;q.x=bx;q.y=by;
+   if(!poor){const np=getP(img,bx,by,P);for(let i=0;i<tp.length;i++)tp[i]=tp[i]*(1-cf.a)+np[i]*cf.a}
+   newp[j].push({t,x:bx/s,y:by/s})}
+  sync();say('Tracking\u2026 '+Math.round((t/v.duration)*100)+'%  (Stop to end early)');calc();
+ }
+ sync();smooth();await seekTo(t0);autoPh();calc();
+ say(stop?'Stopped.':'Done. Load, Foot plant and Contact are auto estimates (marked ~). Scrub to the true frame and tap a phase button to correct one.');
+}
+$('trk').onclick=track;$('stp').onclick=()=>{stop=true};
+function poseJoints(L,vw,vh){const vi=i=>L[i].visibility==null?1:L[i].visibility,pt=i=>({x:L[i].x*vw,y:L[i].y*vh}),
+ mid=(a,b)=>{const p=pt(a),q=pt(b);return{x:(p.x+q.x)/2,y:(p.y+q.y)/2}};
+ return{head:vi(7)>.3&&vi(8)>.3?mid(7,8):pt(0),belt:mid(23,24),sh:mid(11,12),fl:mid(29,31),fr:mid(30,32)}}
+function pickFoot(J2,mode,dir){const a=J2.fl,b=J2.fr;return mode==='left'?(a.x<b.x?'fl':'fr'):mode==='right'?(a.x>b.x?'fl':'fr'):(a.x*dir>b.x*dir?'fl':'fr')}
+let PL=null,PLq='',lastTs=0;
+async function getPL(q){
+ if(PL&&PLq===q)return PL;
+ say('Loading the pose model (the first time can take a minute)…');
+ let lib=null,ver='';
+ for(const x of ['0.10.18','0.10.14','0.10.3']){try{lib=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@'+x);ver=x;break}catch(e){}}
+ if(!lib)throw new Error('Could not load the pose library. It needs an internet connection and a page hosted outside the Claude chat.');
+ const fs=await lib.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@'+ver+'/wasm');
+ const url='https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_'+q+'/float16/1/pose_landmarker_'+q+'.task';
+ for(const d of ['GPU','CPU']){try{PL=await lib.PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:url,delegate:d},runningMode:'VIDEO',numPoses:1,minPoseDetectionConfidence:.4,minPosePresenceConfidence:.4,minTrackingConfidence:.4});PLq=q;return PL}catch(e){}}
+ throw new Error('Could not start the pose model.');
+}
+async function poseTrack(){
+ if(!v.videoWidth)return;v.pause();stop=false;
+ let pl;try{pl=await getPL($('pq').value)}catch(e){say((e&&e.message?e.message:'Could not load the pose model.')+' You can still use Track from clicks.');return}
+ const vw=v.videoWidth,vh=v.videoHeight,t0=v.currentTime,dt=+$('step').value/fps(),keys=['head','belt','foot'].concat(pts.sh?['sh']:[]),out={};
+ keys.forEach(k=>out[k]=[]);
+ const med=r=>r.slice().sort((p,q)=>p-q)[r.length>>1],sm=a=>a.map((p,i)=>{const w=a.slice(Math.max(0,i-2),i+3);return{t:p.t,x:med(w.map(z=>z.x)),y:med(w.map(z=>z.y))}});
+ let side=null,miss=0;ph.start=t0;await seekTo(t0);
+ for(let t=t0;t<=v.duration&&!stop;t+=dt){
+  if(t>t0)await seekTo(t);
+  lastTs=Math.max(lastTs+1,Math.round(performance.now()));
+  let res;try{res=pl.detectForVideo(v,lastTs)}catch(e){say('Pose detection failed: '+(e&&e.message?e.message:e));break}
+  const L=res.landmarks&&res.landmarks[0];if(!L){miss++;continue}
+  const J2=poseJoints(L,vw,vh);if(!side)side=pickFoot(J2,$('ff').value,dir);
+  keys.forEach(k=>{const p=J2[k==='foot'?side:k];out[k].push({t,x:p.x,y:p.y})});
+  keys.forEach(k=>pts[k]=out[k].slice());
+  say('Pose tracking… '+Math.round((t/v.duration)*100)+'%  (Stop to end early)');calc();
+ }
+ keys.forEach(k=>pts[k]=sm(out[k]));
+ await seekTo(t0);autoPh();calc();
+ say((stop?'Stopped. ':'Done. ')+(out.head.length?'Scrub or play to check the tracer; Load, Foot plant and Contact are auto estimates (~).':'No person was found in the video.')+(miss?' Pose was not found on '+miss+' frames.':''));
+}
+$('pose').onclick=poseTrack;
+
+$('clrall').onclick=()=>{for(const j in J)pts[j]=[];ph={};man={};cal=[];calc();say('Cleared all points and phases.')};
+$('ref').onchange=()=>{if(cal.length===2){const px=Math.hypot(cal[1].x-cal[0].x,cal[1].y-cal[0].y);scale=(+$('ref').value)/px;calc()}};
+$('clr').onclick=()=>{pts[mode]?pts[mode]=[]:cal=[];calc();say(mode==='cal'?'Calibration cleared.':'Cleared '+J[mode]+' points.')};
+calc();
+</script></body></html>
