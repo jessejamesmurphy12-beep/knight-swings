@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{--navy:#10284B;--navy2:#173B68;--gold:#F4C75E;--ink:#EDF3FC;--muted:#AAB9CE;--panel:#172B49;--panel2:#203A5F;--line:#345174;--green:#55C69A}
+    *{box-sizing:border-box} body{margin:0;background:#0A172A;color:var(--ink);font:14px/1.45 Arial,sans-serif}
+    header{padding:18px 24px;background:linear-gradient(110deg,#0D203B,#1B3558);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+    .brand{font-size:23px;font-weight:900;letter-spacing:.4px}.brand span{color:var(--gold)} .sub{color:var(--muted);font-size:12px;margin-top:3px}
+    .status{border:1px solid #45658A;border-radius:20px;padding:7px 12px;color:#C7D8EE;font-size:12px}
+    nav{display:flex;gap:8px;padding:14px 22px;overflow:auto;background:#0E2039;border-bottom:1px solid var(--line)}
+    button,.tab{cursor:pointer;border:1px solid #45658A;background:#1A3558;color:#EAF1FA;border-radius:9px;padding:10px 14px;font-weight:700;white-space:nowrap}
+    button:hover,.tab:hover{border-color:var(--gold)} button.primary,.tab.active{background:var(--gold);border-color:var(--gold);color:#17263B}
+    button.small{padding:7px 10px;font-size:12px} button.ghost{background:transparent}
+    main{padding:18px;max-width:1500px;margin:auto}.view{display:none}.view.active{display:block}
+    .grid{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:14px;align-items:start}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 8px 25px #0002;min-width:0}
+    .card h3{margin:0 0 4px;font-size:16px}.eyebrow{font-size:11px;color:var(--gold);font-weight:800;letter-spacing:1px;margin-bottom:7px}
+    .hint{color:var(--muted);font-size:12px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+    label{display:block;color:#C7D7EA;font-size:12px;font-weight:700;margin-bottom:5px}
+    input,select,textarea{width:100%;border:1px solid #45658A;border-radius:8px;background:#0D1D33;color:#F2F6FC;padding:10px;font:inherit;min-width:0}
+    textarea{min-height:65px;resize:vertical}.wide{grid-column:1/-1}
+    .zone{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:15px auto 8px;max-width:390px}
+    .zone button{height:58px;padding:0;border-radius:7px;background:#123C70;border-color:#3670A8}.zone button.selected{background:var(--gold);color:#15243A;border-color:#FFE39A}
+    .count{font-size:25px;font-weight:900;color:var(--gold);margin:12px 0}.field{width:100%;max-width:420px;display:block;margin:12px auto;cursor:crosshair}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .metric{background:var(--panel);border:1px solid var(--line);padding:16px;border-radius:12px}.metric b{display:block;font-size:25px;color:var(--gold);margin-top:5px}
+    .metric span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line)}th{color:var(--gold);font-size:11px;text-transform:uppercase}
+    .notice{padding:10px 12px;background:#173E38;border:1px solid #2D806B;color:#C9F4E6;border-radius:9px;margin:12px 0;display:none}
+    .error{background:#49252C;border-color:#9C4651;color:#FFD9DD}.section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:5px 0 14px}
+    .muted{color:var(--muted)} .pill{display:inline-block;padding:4px 8px;border-radius:20px;background:#29496D;color:#DCE9F8;font-size:11px}
+    @media(max-width:1000px){.grid{grid-template-columns:1fr 1fr}.grid .card:first-child{grid-column:1/-1}}
+    @media(max-width:650px){main{padding:10px}.grid{grid-template-columns:1fr}.grid .card:first-child{grid-column:auto}.metrics{grid-template-columns:repeat(2,1fr)}header{padding:14px}.fields{gap:8px}.zone button{height:48px}}
+  </style>
+</head>
+<body>
+<header>
+  <div><div class="brand">NEUMANN <span>BASEBALL</span> / FIELD TRACKER</div><div class="sub">Hitting • Pitching • Spray charts • Player reports</div></div>
+  <div class="status" id="connection">Connecting to Google Sheets…</div>
+</header>
+<nav>
+  <button class="tab active" data-view="hitting">Hitting entry</button>
+  <button class="tab" data-view="pitching">Pitching entry</button>
+  <button class="tab" data-view="dashboard">Dashboard</button>
+  <button class="tab" data-view="reports">Player reports</button>
+  <button class="tab" data-view="roster">Roster & games</button>
+</nav>
+<main>
+  <div id="notice" class="notice"></div>
+
+  <section id="hitting" class="view active">
+    <div class="grid">
+      <div class="card">
+        <div class="eyebrow">01 / GAME SETUP</div><h3>Hitter & pitch</h3><div class="fields">
+          <div class="wide"><label>Game</label><select id="hGame"></select></div>
+          <div><label>Date</label><input id="hDate" type="date"></div><div><label>Opponent</label><input id="hOpponent" placeholder="Opponent"></div>
+          <div><label>Hitter</label><select id="hHitter"></select></div><div><label>Hitter bats</label><select id="hBats"><option>R</option><option>L</option><option>S</option></select></div>
+          <div><label>Opposing pitcher</label><input id="hPitcher" placeholder="Name / #"></div><div><label>Pitcher throws</label><select id="hThrows"><option>RHP</option><option>LHP</option></select></div>
+          <div><label>Inning</label><input id="hInning" type="number" min="1" value="1"></div><div><label>Pitch type</label><select id="hType"></select></div>
+          <div><label>Velocity (optional)</label><input id="hVelocity" type="number" placeholder="MPH"></div><div><label>Pitch result</label><select id="hResult"><option>Pitch only</option><option>Ball</option><option>Called strike</option><option>Swinging strike</option><option>Foul</option><option>In play</option><option>Hit by pitch</option></select></div>
+          <div><label>Balls before</label><select id="hBalls"><option>0</option><option>1</option><option>2</option><option>3</option></select></div><div><label>Strikes before</label><select id="hStrikes"><option>0</option><option>1</option><option>2</option></select></div>
+        </div>
+        <div class="count" id="hCount">0–0 · Pitch 1</div>
+        <div class="actions"><button class="primary" onclick="saveHitting()">Save pitch</button><button class="ghost" onclick="resetHittingCount()">Reset count</button></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">02 / STRIKE ZONE</div><h3>Tap pitch location</h3><div class="hint">Catcher's view · 5 × 5 zones, including edges</div>
+        <div class="zone" id="hZone"></div><div class="hint" id="hZoneLabel">No location selected</div>
+        <div class="fields"><div><label>Contact type</label><select id="hContact"><option value="">—</option><option>Ground ball</option><option>Line drive</option><option>Fly ball</option><option>Popup</option><option>Bunt</option></select></div><div><label>Contact quality</label><select id="hQuality"><option value="">—</option><option>Weak</option><option>Medium</option><option>Hard</option><option>Barrel</option></select></div></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">03 / BATTED BALL</div><h3>Tap where the ball landed</h3><div class="hint">Use for balls in play. Click the field to add spray location.</div>
+        <svg class="field" viewBox="0 0 400 330" id="hField" onclick="fieldClick(event,'h')">
+          <path d="M200 25 L365 190 L200 310 L35 190 Z" fill="#167F83" stroke="#B9E5D8" stroke-width="3"/>
+          <path d="M200 25 L200 310 M35 190 L365 190" stroke="#CDEBE1" stroke-width="2" opacity=".7"/>
+          <path d="M200 310 L145 255 L200 205 L255 255 Z" fill="#D5CBA3" stroke="#F7EED0" stroke-width="2"/>
+          <path d="M200 205 L200 25 M145 255 L35 190 M255 255 L365 190" stroke="#EAF4E9" stroke-width="2"/>
+          <circle cx="200" cy="205" r="4" fill="#FFF"/><text x="200" y="17" text-anchor="middle" fill="#DDEEFF" font-size="12">CF</text>
+          <text x="20" y="205" fill="#DDEEFF" font-size="12">LF</text><text x="380" y="205" text-anchor="end" fill="#DDEEFF" font-size="12">RF</text>
+          <g id="hMarker"></g>
+        </svg>
+        <div class="hint" id="hFieldLabel">No batted-ball location selected</div>
+        <div class="fields"><div><label>Direction</label><select id="hDirection"><option value="">—</option><option>Pull</option><option>Middle</option><option>Opposite</option></select></div><div><label>RBI</label><input id="hRbi" type="number" min="0" value="0"></div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px"><div class="eyebrow">04 / PLATE APPEARANCE</div><h3>Close out the at-bat</h3><div class="fields">
+      <div><label>PA result</label><select id="paResult"><option>1B</option><option>2B</option><option>3B</option><option>HR</option><option>BB</option><option>HBP</option><option>K</option><option>Out</option><option>FC</option><option>SF</option><option>SH</option><option>ROE</option><option>Other</option></select></div>
+      <div><label>Runs scored</label><input id="paRuns" type="number" min="0" value="0"></div>
+      <div><label>PA notes</label><input id="paNotes" placeholder="Optional"></div>
+    </div><div class="actions"><button class="primary" onclick="savePA()">Save plate appearance</button></div></div>
+  </section>
+
+  <section id="pitching" class="view">
+    <div class="grid">
+      <div class="card"><div class="eyebrow">01 / PITCHER & GAME</div><h3>Pitching entry</h3><div class="fields">
+        <div class="wide"><label>Game</label><select id="pGame"></select></div>
+        <div><label>Date</label><input id="pDate" type="date"></div><div><label>Opponent</label><input id="pOpponent" placeholder="Opponent"></div>
+        <div><label>Pitcher</label><select id="pPitcher"></select></div><div><label>Throws</label><select id="pThrows"><option>RHP</option><option>LHP</option></select></div>
+        <div><label>Batter</label><input id="pBatter" placeholder="Name / #"></div><div><label>Batter side</label><select id="pSide"><option>RHH</option><option>LHH</option></select></div>
+        <div><label>Inning</label><input id="pInning" type="number" min="1" value="1"></div><div><label>Outs before</label><select id="pOuts"><option>0</option><option>1</option><option>2</option></select></div>
+        <div><label>Pitch type</label><select id="pType"></select></div><div><label>Velocity</label><input id="pVelocity" type="number" placeholder="MPH"></div>
+        <div><label>Balls before</label><select id="pBalls"><option>0</option><option>1</option><option>2</option><option>3</option></select></div><div><label>Strikes before</label><select id="pStrikes"><option>0</option><option>1</option><option>2</option></select></div>
+        <div><label>Result</label><select id="pResult"><option>Pitch only</option><option>Ball</option><option>Called strike</option><option>Swinging strike</option><option>Foul</option><option>In play</option><option>Hit by pitch</option></select></div>
+        <div><label>Earned runs</label><input id="pER" type="number" min="0" value="0"></div>
+      </div><div class="actions"><button class="primary" onclick="savePitching()">Save pitch</button></div></div>
+      <div class="card"><div class="eyebrow">02 / LOCATION</div><h3>Pitch location</h3><div class="hint">Tap a cell from the pitcher's perspective.</div><div class="zone" id="pZone"></div><div class="hint" id="pZoneLabel">No location selected</div>
+        <div class="fields"><div><label>Contact type</label><select id="pContact"><option value="">—</option><option>Ground ball</option><option>Line drive</option><option>Fly ball</option><option>Popup</option><option>Bunt</option></select></div><div><label>Contact quality</label><select id="pQuality"><option value="">—</option><option>Weak</option><option>Medium</option><option>Hard</option><option>Barrel</option></select></div></div>
+      </div>
+      <div class="card"><div class="eyebrow">03 / BALL IN PLAY</div><h3>Spray location</h3><div class="hint">Click the field if the ball is put in play.</div>
+        <svg class="field" viewBox="0 0 400 330" onclick="fieldClick(event,'p')"><path d="M200 25 L365 190 L200 310 L35 190 Z" fill="#167F83" stroke="#B9E5D8" stroke-width="3"/><path d="M200 25 L200 310 M35 190 L365 190" stroke="#CDEBE1" stroke-width="2" opacity=".7"/><path d="M200 310 L145 255 L200 205 L255 255 Z" fill="#D5CBA3" stroke="#F7EED0" stroke-width="2"/><circle cx="200" cy="205" r="4" fill="#FFF"/><text x="200" y="17" text-anchor="middle" fill="#DDEEFF" font-size="12">CF</text><text x="20" y="205" fill="#DDEEFF" font-size="12">LF</text><text x="380" y="205" text-anchor="end" fill="#DDEEFF" font-size="12">RF</text><g id="pMarker"></g></svg>
+        <div id="pFieldLabel" class="hint">No batted-ball location selected</div><div class="fields"><div><label>Runs scored</label><input id="pRuns" type="number" min="0" value="0"></div><div><label>Direction</label><select id="pDirection"><option value="">—</option><option>Pull</option><option>Middle</option><option>Opposite</option></select></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="dashboard" class="view">
+    <div class="section-title"><div><div class="eyebrow">TEAM PERFORMANCE</div><h2 style="margin:0">Hitting & pitching dashboard</h2></div><button class="small" onclick="refresh()">Refresh data</button></div>
+    <div class="metrics" id="metrics"></div>
+    <div class="card" style="margin-top:14px"><h3>Team snapshot</h3><p class="hint">Statistics calculate from saved plate appearances and pitch logs. Enter completed plate appearances to populate traditional batting stats.</p><div id="dashboardNote" class="muted"></div></div>
+  </section>
+
+  <section id="reports" class="view">
+    <div class="card"><div class="eyebrow">PLAYER ANALYTICS</div><h2 style="margin:0 0 12px">Player report</h2><div class="fields"><div><label>Select player</label><select id="reportPlayer"></select></div><div style="display:flex;align-items:end"><button class="primary" onclick="loadReport()">Generate report</button></div></div><div id="reportOutput"></div></div>
+  </section>
+
+  <section id="roster" class="view">
+    <div class="grid">
+      <div class="card"><div class="eyebrow">ROSTER MANAGEMENT</div><h3>Add player</h3><div class="fields">
+        <div class="wide"><label>Player name</label><input id="newName" placeholder="First Last"></div><div><label>Number</label><input id="newNumber" placeholder="##"></div><div><label>Position</label><select id="newPosition"><option>IF</option><option>OF</option><option>C</option><option>P</option><option>UTL</option></select></div><div><label>Bats</label><select id="newBats"><option>R</option><option>L</option><option>S</option></select></div><div><label>Throws</label><select id="newThrows"><option>R</option><option>L</option></select></div>
+      </div><div class="actions"><button class="primary" onclick="addPlayer()">Add player</button></div></div>
+      <div class="card"><div class="eyebrow">SCHEDULE</div><h3>Add game</h3><div class="fields"><div><label>Date</label><input id="newGameDate" type="date"></div><div><label>Opponent</label><input id="newOpponent"></div><div><label>Location</label><select id="newLocation"><option>Home</option><option>Away</option><option>Neutral</option><option>Practice</option></select></div><div><label>Season</label><input id="newSeason" placeholder="2027"></div></div><div class="actions"><button class="primary" onclick="addGame()">Add game</button></div></div>
+    </div>
+    <div class="card" style="margin-top:14px"><h3>Active roster</h3><div id="rosterTable"></div></div>
+  </section>
+</main>
+<script>
+const pitchTypes=['FB','Sinker','Cutter','Slider','Curveball','Changeup','Splitter','Other'];
+let appData={players:[],games:[]}, hZone=null,pZone=null,hPoint=null,pPoint=null;
+const $=id=>document.getElementById(id);
+function msg(text,error=false){const n=$('notice');n.textContent=text;n.className='notice'+(error?' error':'');n.style.display='block';setTimeout(()=>n.style.display='none',5000)}
+function call(fn,args,success){google.script.run.withSuccessHandler(success||(()=>{})).withFailureHandler(e=>msg(e.message||String(e),true))[fn](args)}
+function init(){['hType','pType'].forEach(id=>$(id).innerHTML=pitchTypes.map(x=>`<option>${x}</option>`).join(''));['hZone','pZone'].forEach(id=>buildZone(id));document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>showView(b.dataset.view));$('hDate').value=$('pDate').value=new Date().toISOString().slice(0,10);refresh()}
+function buildZone(id){$(id).innerHTML='';for(let r=1;r<=5;r++)for(let c=1;c<=5;c++){const b=document.createElement('button');b.textContent=`${r},${c}`;b.onclick=()=>selectZone(id,r,c);$(id).appendChild(b)}}
+function selectZone(id,r,c){const isH=id==='hZone';if(isH)hZone={r,c};else pZone={r,c};[...$(id).children].forEach((b,i)=>b.classList.toggle('selected',i===(r-1)*5+c-1));$(isH?'hZoneLabel':'pZoneLabel').textContent=`Selected zone ${r}, ${c} · ${r<=2?'Up':'Down'} / ${c<=2?'Glove side':'Arm side'}`}
+function fieldClick(e,prefix){const svg=e.currentTarget,pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const p=pt.matrixTransform(svg.getScreenCTM().inverse());const x=Math.max(0,Math.min(400,p.x)),y=Math.max(0,Math.min(330,p.y));const point={x:Math.round(x),y:Math.round(y)};if(prefix==='h')hPoint=point;else pPoint=point;const g=$(prefix+'Marker');g.innerHTML=`<circle cx="${x}" cy="${y}" r="7" fill="#F4C75E" stroke="#172B49" stroke-width="2"/><circle cx="${x}" cy="${y}" r="2" fill="#10284B"/>`;$(prefix+'FieldLabel').textContent=`Selected field location: X ${point.x}, Y ${point.y}`}
+function fillSelect(id,items,placeholder,labelFn){$(id).innerHTML=`<option value="">${placeholder}</option>`+items.map(x=>`<option value="${x.id}">${labelFn(x)}</option>`).join('')}
+function refresh(){google.script.run.withSuccessHandler(data=>{appData=data;$('connection').textContent='● Google Sheets connected · '+data.user;fillSelect('hHitter',data.players,'Choose hitter',p=>`${p.Name} ${p.Number?'#'+p.Number:''}`);fillSelect('pPitcher',data.players.filter(p=>p.Position==='P'||p.Position==='UTL'),'Choose pitcher',p=>`${p.Name} ${p.Number?'#'+p.Number:''}`);fillSelect('reportPlayer',data.players,'Choose player',p=>p.Name);['hGame','pGame'].forEach(id=>fillSelect(id,data.games,'Select game',g=>`${g.Date} · ${g.Opponent}`));$('metrics').innerHTML=Object.entries({'Plate appearances':data.dashboard.plateAppearances,'At bats':data.dashboard.atBats,'Hits':data.dashboard.hits,'Team AVG':data.dashboard.avg,'Walks':data.dashboard.walks,'Strikeouts':data.dashboard.strikeouts,'Home runs':data.dashboard.homeRuns,'Hitting pitches':data.dashboard.hittingPitches,'Pitching pitches':data.dashboard.pitchingPitches}).map(([k,v])=>`<div class="metric"><span>${k}</span><b>${v}</b></div>`).join('');$('dashboardNote').textContent=`Pitch log entries: ${data.dashboard.hittingPitches} hitter-side · ${data.dashboard.pitchingPitches} pitcher-side.`;$('rosterTable').innerHTML='<table><thead><tr><th>Player</th><th>#</th><th>Position</th><th>Bats</th><th>Throws</th></tr></thead><tbody>'+data.players.map(p=>`<tr><td>${esc(p.Name)}</td><td>${esc(p.Number)}</td><td>${esc(p.Position)}</td><td>${esc(p.Bats)}</td><td>${esc(p.Throws)}</td></tr>`).join('')+'</tbody></table>';},).withFailureHandler(e=>msg(e.message||String(e),true)).getAppData()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function showView(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.tab').forEach(v=>v.classList.toggle('active',v.dataset.view===id))}
+function selectedGame(id){return appData.games.find(g=>g['Game ID']===$(id).value)||{}}
+function hitterData(){const p=appData.players.find(x=>x['Player ID']===$('hHitter').value)||{};const g=selectedGame('hGame');return {gameId:$('hGame').value,date:$('hDate').value,opponent:$('hOpponent').value||g.Opponent||'',hitter:p.Name||'',hitterId:p['Player ID']||'',hitterBats:$('hBats').value,pitcher:$('hPitcher').value,pitcherThrows:$('hThrows').value,inning:$('hInning').value,balls:$('hBalls').value,strikes:$('hStrikes').value,pitchNumber:1,pitchType:$('hType').value,velocity:$('hVelocity').value,zoneRow:hZone?.r||'',zoneCol:hZone?.c||'',zoneLabel:hZone?`${hZone.r},${hZone.c}`:'',result:$('hResult').value,contactType:$('hContact').value,contactQuality:$('hQuality').value,x:hPoint?.x||'',y:hPoint?.y||'',direction:$('hDirection').value,rbi:$('hRbi').value}}
+function saveHitting(){const d=hitterData();if(!d.hitter)return msg('Choose a hitter first.',true);call('saveHittingPitch',d,r=>{msg(r.message);$('hVelocity').value='';hZone=null;hPoint=null;$('hZoneLabel').textContent='No location selected';$('hMarker').innerHTML='';$('hFieldLabel').textContent='No batted-ball location selected';})}
+function resetHittingCount(){$('hBalls').value='0';$('hStrikes').value='0';$('hCount').textContent='0–0 · Pitch 1'}
+function savePA(){const d=hitterData();if(!d.hitter)return msg('Choose a hitter first.',true);d.result=$('paResult').value;d.runsScored=$('paRuns').value;d.notes=$('paNotes').value;d.pitcher=$('hPitcher').value;call('savePlateAppearance',d,r=>{msg(r.message);refresh()})}
+function savePitching(){const p=appData.players.find(x=>x['Player ID']===$('pPitcher').value)||{};const g=selectedGame('pGame');const d={gameId:$('pGame').value,date:$('pDate').value,opponent:$('pOpponent').value||g.Opponent||'',pitcher:p.Name||'',pitcherId:p['Player ID']||'',pitcherThrows:$('pThrows').value,batter:$('pBatter').value,batterSide:$('pSide').value,inning:$('pInning').value,outs:$('pOuts').value,balls:$('pBalls').value,strikes:$('pStrikes').value,pitchNumber:1,pitchType:$('pType').value,velocity:$('pVelocity').value,zoneRow:pZone?.r||'',zoneCol:pZone?.c||'',zoneLabel:pZone?`${pZone.r},${pZone.c}`:'',result:$('pResult').value,contactType:$('pContact').value,contactQuality:$('pQuality').value,x:pPoint?.x||'',y:pPoint?.y||'',direction:$('pDirection').value,runsScored:$('pRuns').value,earnedRuns:$('pER').value};if(!d.pitcher)return msg('Choose a pitcher first.',true);call('savePitchingPitch',d,r=>{msg(r.message);$('pVelocity').value='';pZone=null;pPoint=null;$('pZoneLabel').textContent='No location selected';$('pMarker').innerHTML='';$('pFieldLabel').textContent='No batted-ball location selected';})}
+function loadReport(){const p=$('reportPlayer').value;if(!p)return msg('Choose a player.',true);google.script.run.withSuccessHandler(r=>{$('reportOutput').innerHTML=`<div class="metrics" style="margin-top:16px">${[['AVG',r.avg],['OBP',r.obp],['SLG',r.slg],['OPS',r.ops],['PA',r.pa],['H',r.h],['BB',r.bb],['K',r.k],['HR',r.hr],['RBI',r.rbi],['Hitting pitches',r.hittingPitches],['Pitching pitches',r.pitchingPitches]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}</div><p class="hint">Traditional batting rates are based on saved plate appearances. Pitching pitch totals are included when the selected player is logged as pitcher.</p>`}).withFailureHandler(e=>msg(e.message,true)).getReport({player:p})}
+function addPlayer(){const d={name:$('newName').value,number:$('newNumber').value,position:$('newPosition').value,bats:$('newBats').value,throws:$('newThrows').value};call('addPlayer',d,r=>{msg(r.message);$('newName').value='';refresh()})}
+function addGame(){const d={date:$('newGameDate').value,opponent:$('newOpponent').value,location:$('newLocation').value,season:$('newSeason').value};call('addGame',d,r=>{msg(r.message);refresh()})}
+init();
+</script>
+</body>
+</html>
